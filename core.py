@@ -500,6 +500,24 @@ def fetch_models(base_url, api_key, allow_private_http=False):
 
 
 API_ONLY_IMPORT_HINT = '仅支持API导入'
+UNSUPPORTED_IMPORT_HINT = '不支持导入到目标应用'
+
+
+def unsupported_chat_model(model_id):
+    """Recognize dedicated non-chat families, not generic image/video inputs."""
+    name = model_id.casefold().split('/')[-1]
+    return re.search(
+        r'(?:^|[-_.])(?:seedream|seedance|minimax-h3|dall-e|stable-diffusion|flux|'
+        r'sora|imagen|gpt-image|image-generation|text-to-image|text-to-video|'
+        r'image-to-video|video-generation|embedding|embeddings|embed|rerank|reranker|'
+        r'whisper|tts|text-to-speech|speech-to-text)(?:$|[-_.0-9])', name,
+    ) is not None or (
+        name.startswith('gemini-') and re.search(r'-image(?:-|$)', name) is not None)
+
+
+def validate_chat_models(ids):
+    if any(unsupported_chat_model(mid) for mid in ids):
+        raise UserError(UNSUPPORTED_IMPORT_HINT + '，请选择对话或视觉理解模型。')
 
 
 def image_video_hint(model_id):
@@ -615,6 +633,7 @@ def make_plan(raw, base_url, api_key, ids, capabilities=None, update_existing=Fa
         raise UserError('模型能力设置不合法。')
     if not ids or len(ids) > 10000 or any(not valid_id(x) for x in ids):
         raise UserError('请至少选择一个有效模型；每批最多 10000 个。')
+    validate_chat_models(ids)
     rows = []
     for mid in dict.fromkeys(ids):
         limits = model_limits.get(mid, default_limits)

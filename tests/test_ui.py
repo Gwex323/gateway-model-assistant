@@ -179,18 +179,18 @@ class UiTests(unittest.TestCase):
         self.ui.model_token_limits['Seedance-2.0'] = {'maxInputTokens': 100, 'maxOutputTokens': 20}
         self.ui.model_specs['Seedance-2.0'] = {'max_input': '100', 'max_output': '20'}
         self.ui.refresh()
-        self.assertEqual(self.ui.tree.item('1', 'values')[2:4], ('仅支持API导入', '仅支持API导入'))
+        self.assertEqual(self.ui.tree.item('1', 'values')[2:4], ('不支持导入到目标应用', '不支持导入到目标应用'))
         self.assertEqual(self.ui.model_token_limits['Seedance-2.0'], {'maxInputTokens': 100, 'maxOutputTokens': 20})
-        self.assertEqual(self.ui.token_display_values('gpt-image-1'), ('仅支持API导入', '仅支持API导入'))
+        self.assertEqual(self.ui.token_display_values('gpt-image-1'), ('不支持导入到目标应用', '不支持导入到目标应用'))
 
     def test_image_video_detection_excludes_visual_understanding_and_audio(self):
         for model_id in ('Seedream-4', 'Seedance-2', 'MiniMax-H3', 'gpt-image-1', 'gemini-2.5-flash-image'):
             with self.subTest(model_id=model_id):
                 self.assertTrue(core.image_video_hint(model_id))
-        for model_id in ('qwen-vl', 'deepseek-vision-exp', 'gemini-test', 'embedding-3', 'whisper-1', 'tts-1', 'rerank-3'):
+        for model_id in ('qwen-vl', 'deepseek-vision-exp', 'gemini-test'):
             with self.subTest(model_id=model_id):
                 self.assertFalse(core.image_video_hint(model_id))
-                self.assertNotIn('仅支持API导入', self.ui.token_display_values(model_id))
+                self.assertNotIn('不支持导入到目标应用', self.ui.token_display_values(model_id))
 
     def test_selection_updates_cells_without_rebuilding_or_resizing_table(self):
         with patch.object(self.ui, 'refresh') as refresh, patch.object(self.ui, '_autosize_model_columns') as resize:
@@ -199,7 +199,7 @@ class UiTests(unittest.TestCase):
             self.assertEqual(self.ui.tree.set('0', 'check'), '✓')
             self.assertEqual(self.ui.tree.focus(), '0')
             self.ui.select_visible(True)
-            self.assertEqual(self.ui.selected, {'code-model', 'Seedance-2.0', 'second-code-model'})
+            self.assertEqual(self.ui.selected, {'code-model', 'second-code-model'})
             self.ui.select_visible(False)
             self.assertEqual(self.ui.tree.set('0', 'check'), '')
             refresh.assert_not_called()
@@ -220,11 +220,11 @@ class UiTests(unittest.TestCase):
 
     def test_filter_selection_preserved(self):
         self.ui.select_visible(True)
-        self.assertEqual(self.ui.selected, {'code-model', 'Seedance-2.0', 'second-code-model'})
+        self.assertEqual(self.ui.selected, {'code-model', 'second-code-model'})
         self.ui.search.set('second')
         self.assertEqual(len(self.ui.tree.get_children()), 1)
         self.ui.select_visible(False)
-        self.assertEqual(self.ui.selected, {'code-model', 'Seedance-2.0'})
+        self.assertEqual(self.ui.selected, {'code-model'})
 
     def test_connection_change_requires_refetch(self):
         self.ui.url.set('https://other.example/v1')
@@ -306,7 +306,7 @@ class UiTests(unittest.TestCase):
         self.assertFalse(hasattr(self.ui, 'hide_media'))
         self.assertEqual(len(self.ui.tree.get_children()), 2)
         self.assertEqual(self.ui.tree.item('0', 'values')[2:4], ('≤1048576', '1048576－本次输入'))
-        self.assertEqual(self.ui.tree.item('1', 'values')[2:4], ('仅支持API导入', '仅支持API导入'))
+        self.assertEqual(self.ui.tree.item('1', 'values')[2:4], ('不支持导入到目标应用', '不支持导入到目标应用'))
         self.assertIn('1/1', self.ui.status.get())
         self.assertEqual(self.ui.model_specs['kimi-k3']['max_output'], '1048576－本次输入')
         self.assertEqual(self.ui.model_token_limits['kimi-k3']['maxOutputTokens'], 131072)
@@ -650,7 +650,7 @@ class UiTests(unittest.TestCase):
         self.assertFalse(hasattr(self.ui, 'hide_media'))
         self.assertEqual(len(self.ui.tree.get_children()), 3)
         button.invoke()
-        self.assertEqual(self.ui.selected, set(self.ui.ids))
+        self.assertEqual(self.ui.selected, {'code-model', 'second-code-model'})
         self.ui.selected.clear()
         self.ui.search.set('second')
         button.invoke()
@@ -1156,7 +1156,7 @@ class UiTests(unittest.TestCase):
     def test_selected_rows_receive_visual_highlight(self):
         self.ui.select_visible(True)
         self.assertIn('checked', self.ui.tree.item('0', 'tags'))
-        self.assertIn('已选择 3', self.ui.selected_count.get())
+        self.assertIn('已选择 2', self.ui.selected_count.get())
         self.ui.select_visible(False)
         self.assertNotIn('checked', self.ui.tree.item('0', 'tags'))
 

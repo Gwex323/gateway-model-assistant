@@ -405,6 +405,7 @@ class App:
             self.tree.column(name, stretch=False, anchor='center')
         self.tree.tag_configure('checked', background=self.COLORS['accent_soft'])
         self.tree.tag_configure('alternate', background='#FAFCFA')
+        self.tree.tag_configure('unsupported', foreground='#929A95', background='#F3F5F4')
         self.tree.grid(row=0, column=0, sticky='nsew')
         scroll = ttk.Scrollbar(listing, orient='vertical', command=self.tree.yview)
         # Keep native scrolling callbacks without displaying bars or gutters.
@@ -644,8 +645,8 @@ class App:
             self.model_image_support = {model.id: model.supports_images for model in catalog}
             self.model_limit_sources = {model.id: model.limit_source or ('接口元数据' if model.token_limits else '未识别') for model in catalog}
             self.model_specs = {model.id: {
-                'max_input': core.API_ONLY_IMPORT_HINT if core.image_video_hint(model.id) else model.input_display or str(model.max_input_tokens or '未识别'),
-                'max_output': core.API_ONLY_IMPORT_HINT if core.image_video_hint(model.id) else model.output_display or str(model.max_output_tokens or '未识别'),
+                'max_input': model.input_display or str(model.max_input_tokens or '未识别'),
+                'max_output': model.output_display or str(model.max_output_tokens or '未识别'),
                 'source_url': model.limit_source_url, 'note': model.limit_note,
                 'supports_images': model.supports_images,
             } for model in catalog}
@@ -695,14 +696,15 @@ class App:
                              width=natural + (spare if column == 'id' else 0), stretch=False)
 
     def token_display_values(self, model_id):
-        if core.image_video_hint(model_id):
-            return (core.API_ONLY_IMPORT_HINT, core.API_ONLY_IMPORT_HINT)
+        if core.unsupported_chat_model(model_id):
+            return (core.UNSUPPORTED_IMPORT_HINT, core.UNSUPPORTED_IMPORT_HINT)
         spec = self.model_specs.get(model_id, {})
         limits = self.model_token_limits.get(model_id, {})
         return (spec.get('max_input', str(limits.get('maxInputTokens', '未识别'))),
                 spec.get('max_output', str(limits.get('maxOutputTokens', '未识别'))))
 
     def refresh(self):
+        self.selected.difference_update(mid for mid in tuple(self.selected) if core.unsupported_chat_model(mid))
         self.tree.delete(*self.tree.get_children())
         query = self.search.get().casefold()
         for index, model_id in enumerate(self.ids):
@@ -714,7 +716,8 @@ class App:
                 *self.token_display_values(model_id),
                 self.model_limit_sources.get(model_id, '媒体/嵌入，需核实' if media else '未验证'),
                 self.model_display_names.get(model_id, '默认 / 保留原名')),
-                tags=('checked',) if model_id in self.selected else ('alternate',) if index % 2 else ())
+                tags=('unsupported',) if core.unsupported_chat_model(model_id) else
+                     ('checked',) if model_id in self.selected else ('alternate',) if index % 2 else ())
         visible = len(self.tree.get_children())
         self.selected_count.set(f'已选择 {len(self.selected)} · 共 {len(self.ids)} 个 · 可见 {visible}')
         if visible:
@@ -777,6 +780,8 @@ class App:
         if self.busy or not row:
             return
         model_id = self.ids[int(row)]
+        if core.unsupported_chat_model(model_id):
+            return
         if model_id in self.selected:
             self.selected.remove(model_id)
         else:
@@ -798,7 +803,7 @@ class App:
         rows = self.tree.get_children()
         for row in rows:
             model_id = self.ids[int(row)]
-            if yes:
+            if yes and not core.unsupported_chat_model(model_id):
                 self.selected.add(model_id)
             else:
                 self.selected.discard(model_id)
@@ -811,7 +816,8 @@ class App:
             index = int(row)
             checked = self.ids[index] in self.selected
             self.tree.set(row, 'check', '✓' if checked else '')
-            self.tree.item(row, tags=('checked',) if checked else ('alternate',) if index % 2 else ())
+            self.tree.item(row, tags=('unsupported',) if core.unsupported_chat_model(self.ids[index]) else
+                           ('checked',) if checked else ('alternate',) if index % 2 else ())
         self.selected_count.set(
             f'已选择 {len(self.selected)} · 共 {len(self.ids)} 个 · 可见 {len(self.tree.get_children())}')
 
@@ -852,6 +858,7 @@ class App:
             return url
 
     def build_import_plans(self, url, key, selected, flags, token_limits_by_model=None):
+        core.validate_chat_models(selected)
         names = self.selected_import_targets()
         if not names:
             raise core.UserError('请至少选择一个导入应用。')
