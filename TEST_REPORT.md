@@ -1,5 +1,11 @@
 # 验证结果
 
+## v1.0.2（2026-10-16）
+
+- 在保留远端 README 标题修改的基础上合并元数据优先识别分支，285 项离线回归全部通过，语法及 Git 空白检查通过。
+- 重新构建 Windows 便携版，交付 EXE 文件版本与程序内版本均为 1.0.2；空工作目录和清理 Python/Tcl/Tk 环境后的自检 ok=true、frozen=true、metadata_first_model_classification=true、non_chat_models_disabled=true。
+- 覆盖元数据优先、名称兜底、未知类型待确认，以及三个客户端规划与选择限制；未使用真实凭据、真实客户端导入或付费生成。
+
 ## 元数据优先识别（功能分支，2026-10-16）
 
 - 285 项离线回归通过，Python 语法检查与 Git 空白检查通过；源码应用自检 ok=true、metadata_first_model_classification=true。
