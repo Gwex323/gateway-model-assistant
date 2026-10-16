@@ -1,5 +1,26 @@
 # 验证结果
 
+## v1.0.3 统一发布的 PR 验证（2026-10-16）
+
+- 正式版本统一为 1.0.3，包含 MiMo 规格解析、Tripo 分类及此前 Kling/hy-3d 修复；下方 1.0.4 仅为历史本地测试编号，未公开发布。
+- 在统一版本后重新执行 292 项离线测试全部通过，语法与 Git 空白检查通过；源码自检 version=1.0.3、ok=true、mimo_specs_tripo_verified=true、video_3d_models_disabled=true。
+- 发布流程为先提交并合并 PR，再从 main 构建便携版；打包程序的版本、自检及下载包校验通过后才发布 Release。未知类型仍保持待确认可选，不改变已确认策略。
+
+## v1.0.4 本地修复版（2026-10-16）
+
+- 在含 Kling/hy-3d 修复的分支上修复 MiMo 规格解析和 Tripo 漏识别，292 项离线测试全部通过，语法与 Git 空白检查通过。
+- MiMo 使用同一行内精确模型 ID 和字段标签，兼容同格多个 ID、能力单元格 rowspan 导致的列位移、退役说明，以及 flash/ultraspeed 后缀。缺值、相似 ID、跨行拼值、限流字段和冲突规格均不补值。
+- 只读实时 MiMo 官方公开规格页验证：v2.5、v2.5-pro、v2.6-pro、v2.6-flash、v2.6-pro-ultraspeed 均匹配；本次显示共享上下文保守上界 ≤1000000、最大输出保守值 128000，导入预算为输入 872000、输出 128000，非两项独立最大值。
+- 离线链路覆盖 MiMo 的列表显示和三个客户端导入预算，以及 Tripo 名称变体的列表、点击/键盘/全选与适配器禁选；ASR/TTS 不按 MiMo 文本模型放行。
+- 本地 EXE 内部与文件版本均为 1.0.4，隔离环境自检 frozen=true、ok=true、mimo_specs_tripo_verified=true、video_3d_models_disabled=true。未使用真实密钥或付费推理，未写真实客户端配置；尚未合并或替换 GitHub Release。
+
+## v1.0.3 本地修复版（2026-10-16）
+
+- 修复前离线复现 Kling、hy-3d、hunyuan3d 名称返回未知并被允许选择；3D 生成任务及输出模态同样未被识别。原测试未覆盖这些示例，不代表所有非聊天模型均已识别。
+- 添加有边界的名称兜底，覆盖大小写、版本、分隔符和 kling/video-o1 等命名空间；补充 3D 生成任务、mesh/3d/point-cloud 输出判定。保留元数据优先和未知可选策略，视觉理解及相似非媒体名称不误禁用。
+- 287 项全量离线测试通过；新增样例贯穿模型目录获取、列表状态、点击/键盘/全选、三个适配器拒绝及覆盖已有的规划入口。测试不使用真实上游响应或真实凭据。
+- 本地交付 EXE 文件版本与内部版本均为 1.0.3，隔离环境自检 frozen=true、ok=true、video_3d_models_disabled=true、metadata_first_model_classification=true。未合并或更新 GitHub Release。
+
 ## v1.0.2（2026-10-16）
 
 - 在保留远端 README 标题修改的基础上合并元数据优先识别分支，285 项离线回归全部通过，语法及 Git 空白检查通过。

@@ -1,4 +1,5 @@
 """Metadata-first model classification, with offline client fixtures only."""
+import json
 from pathlib import Path
 import tempfile
 import tkinter as tk
@@ -11,6 +12,8 @@ from modern_ui import App
 import trae_adapter
 import trae_solo_adapter
 from test_trae_adapter import make_db
+from test_mimo_specs import MIMO_TABLE
+import provider_specs
 
 
 class ClassificationTests(unittest.TestCase):
@@ -58,6 +61,27 @@ class ClassificationTests(unittest.TestCase):
         self.assertIsNone(chat_model_support('video-understanding-alias'))
         self.assertIs(chat_model_support('qwen-vl'), True)
         self.assertIs(chat_model_support('Seedance-2'), False)
+
+    def test_3d_tasks_and_output_modalities_reject_opaque_aliases(self):
+        for metadata in (
+            {'task': 'text-to-3d'}, {'model_type': 'image_to_3d'},
+            {'mode': '3d_generation'}, {'task': 'mesh-generation'},
+            {'metadata': {'pipeline_tag': '3d-model-generation'}},
+            {'output_modalities': ['3d']}, {'architecture': {'modality': 'image->mesh'}},
+            {'modalities': {'output': ['point_cloud']}},
+            {'supports_chat': True, 'output_modalities': ['3d-model']},
+        ):
+            with self.subTest(metadata=metadata):
+                model = core._gateway_model({'id': 'opaque-name', **metadata})
+                self.assertIs(model.supports_chat, False)
+                with self.assertRaisesRegex(core.UserError, core.UNSUPPORTED_IMPORT_HINT):
+                    core.validate_chat_models([model.id], {model.id: model.supports_chat})
+
+    def test_known_media_families_still_respect_explicit_metadata(self):
+        for model_id in ('kling', 'hy-3d', 'vendor/hunyuan3d-2.1'):
+            self.assertIs(chat_model_support(model_id), False)
+            self.assertIs(chat_model_support(model_id, True), True)
+            self.assertIs(chat_model_support(model_id, False), False)
 
     def test_conflicts_are_conservative_and_cycles_are_bounded(self):
         for metadata in (
@@ -130,7 +154,12 @@ class ClassificationTests(unittest.TestCase):
                     {'id': 'opaque-generator', 'architecture': {'output_modalities': ['image']}},
                     {'id': 'gpt-image-1', 'task': 'conversational', 'input_modalities': ['text', 'image']},
                     {'id': 'unknown-alias'},
+                    {'id': 'kling-v2.1'}, {'id': 'hy-3d'},
+                    {'id': 'opaque-3d', 'output_modalities': ['mesh']},
+                    {'id': 'tripo-v3'}, {'id': 'mimo-v2.6-flash'},
                 ]})
+                with patch.object(provider_specs, 'read_document', return_value=MIMO_TABLE):
+                    catalog = provider_specs.enrich_sgt_catalog(catalog)
                 with patch.object(app, 'run') as run, patch('modern_ui.core.fetch_model_catalog', return_value=catalog):
                     app.fetch()
                     run.call_args.args[1](run.call_args.args[0]())
@@ -138,19 +167,40 @@ class ClassificationTests(unittest.TestCase):
                 self.assertEqual(app.tree.set(rows['opaque-generator'], 'import_status'), core.UNSUPPORTED_IMPORT_HINT)
                 self.assertEqual(app.tree.set(rows['gpt-image-1'], 'import_status'), '可导入')
                 self.assertEqual(app.tree.set(rows['unknown-alias'], 'import_status'), '类型待确认')
+                self.assertEqual(app.tree.set(rows['mimo-v2.6-flash'], 'import_status'), '可导入')
+                self.assertEqual(app.token_display_values('mimo-v2.6-flash'), ('≤1000000', '128000'))
+                for mid in ('kling-v2.1', 'hy-3d', 'opaque-3d', 'tripo-v3'):
+                    self.assertEqual(app.tree.set(rows[mid], 'import_status'), core.UNSUPPORTED_IMPORT_HINT)
+                    app.toggle_row(rows[mid])
+                    self.assertNotIn(mid, app.selected)
                 app.toggle_row(rows['opaque-generator'])
                 self.assertFalse(app.selected)
                 app.select_visible(True)
-                self.assertEqual(app.selected, {'gpt-image-1', 'unknown-alias'})
-                plans = app.build_import_plans('https://gateway.example/v1', 'fake-key', sorted(app.selected), {})
+                self.assertEqual(app.selected, {'gpt-image-1', 'unknown-alias', 'mimo-v2.6-flash'})
+                plans = app.build_import_plans('https://gateway.example/v1', 'fake-key', sorted(app.selected), {},
+                                               token_limits_by_model=app.model_token_limits)
                 self.assertEqual({kind for _, kind, _, _ in plans}, {'workbuddy', 'trae', 'trae_solo'})
                 buddy = next(plan for _, kind, _, plan in plans if kind == 'workbuddy')
                 self.assertTrue(core.model_array(buddy.document)[0]['supportsImages'])
                 solo = next(plan for _, kind, _, plan in plans if kind == 'trae_solo')
                 self.assertIn('gpt-image-1', solo.ids)
+                budget = {'maxInputTokens': 872000, 'maxOutputTokens': 128000}
+                mimo = next(model for model in core.model_array(buddy.document) if model['id'] == 'mimo-v2.6-flash')
+                self.assertEqual({key: mimo[key] for key in budget}, budget)
+                self.assertEqual(solo.model_token_limits['mimo-v2.6-flash'], budget)
+                trae = next(plan for _, kind, _, plan in plans if kind == 'trae')
+                records = [model for payload in trae.payloads.values()
+                           for models in json.loads(payload).values() for model in models
+                           if model.get('name', '').endswith('//mimo-v2.6-flash')]
+                self.assertTrue(records)
+                for model in records:
+                    self.assertEqual((model['prompt_max_tokens'], model['max_tokens']), (872000, 128000))
                 app.existing_policy.set('覆盖已有')
                 with self.assertRaisesRegex(core.UserError, core.UNSUPPORTED_IMPORT_HINT):
                     app.build_import_plans('https://gateway.example/v1', 'fake-key', ['opaque-generator'], {})
+                for mid in ('kling-v2.1', 'hy-3d', 'opaque-3d', 'tripo-v3'):
+                    with self.assertRaisesRegex(core.UserError, core.UNSUPPORTED_IMPORT_HINT):
+                        app.build_import_plans('https://gateway.example/v1', 'fake-key', [mid], {})
                 app.auth_changed()
                 self.assertEqual(app.model_chat_support, {})
                 app.model_chat_support = {'stale-id': True}

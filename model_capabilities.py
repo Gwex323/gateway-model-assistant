@@ -2,6 +2,17 @@
 import re
 
 
+def mimo_chat_model_id(model_id):
+    """Normalize only explicit MiMo namespaces, never arbitrary gateway aliases."""
+    for prefix in ('xiaomi/', 'mimo/'):
+        if model_id.startswith(prefix):
+            model_id = model_id[len(prefix):]
+            break
+    return model_id if re.fullmatch(
+        r'mimo-v\d+(?:\.\d+)?(?:-(?:pro|flash)(?:-ultraspeed)?)?', model_id,
+    ) else None
+
+
 def chat_metadata_support(metadata):
     """Read bounded, allow-listed declarations; conflicting negatives win."""
     declarations = []
@@ -14,7 +25,9 @@ def chat_metadata_support(metadata):
                    'rerank', 'reranker', 'reranking', 'image-generation', 'text-to-image',
                    'image-to-image', 'video-generation', 'text-to-video', 'image-to-video',
                    'tts', 'text-to-speech', 'speech-to-text', 'transcription',
-                   'automatic-speech-recognition', 'audio-generation'}
+                   'automatic-speech-recognition', 'audio-generation',
+                   '3d-generation', '3d-model-generation', 'text-to-3d', 'image-to-3d',
+                   'mesh-generation', 'texture-generation'}
 
     def strings(value):
         return {v.strip().lower() for v in value} if (
@@ -70,7 +83,9 @@ def chat_metadata_support(metadata):
     visit(metadata)
     # Text output alone can also describe transcription or reranking. Only
     # infer chat from modalities when text is explicitly an accepted input too.
-    nontext = {'image', 'images', 'video', 'audio', 'embedding', 'embeddings', 'vector', 'vectors'}
+    nontext = {'image', 'images', 'video', 'audio', 'embedding', 'embeddings', 'vector', 'vectors',
+               '3d', '3d-model', '3d_model', 'mesh', 'meshes', 'point-cloud', 'point_cloud',
+               'pointcloud', 'geometry'}
     if any(value and value <= nontext for value in output_declarations):
         declarations.append(False)
     elif 'text' in inputs and 'text' in outputs:
@@ -82,15 +97,21 @@ def chat_model_support(model_id, declared=None):
     """Metadata first, known names second, otherwise explicitly unknown."""
     if type(declared) is bool:
         return declared
+    # A provider namespace may carry the only family identifier (kling/video-o1).
+    # Keep token boundaries so unrelated chat aliases such as klingon are unknown.
+    if re.search(r'(?:^|[/_.-])(?:kling(?:ai)?|tripo(?:[-_.]?3d)?|(?:hy|hunyuan)[-_.]?3d)(?=$|[/_.-]|[0-9])',
+                 model_id.casefold()):
+        return False
     name = model_id.casefold().split('/')[-1]
     if re.search(
         r'(?:^|[-_.])(?:seedream|seedance|minimax-h3|dall-e|stable-diffusion|flux|'
         r'sora|imagen|gpt-image|image-generation|text-to-image|text-to-video|'
-        r'image-to-video|video-generation|embedding|embeddings|embed|rerank|reranker|'
-        r'whisper|tts|text-to-speech|speech-to-text)(?:$|[-_.0-9])', name,
+        r'image-to-video|video-generation|text-to-3d|image-to-3d|3d-generation|'
+        r'3d-model-generation|mesh-generation|embedding|embeddings|embed|rerank|reranker|'
+        r'whisper|asr|tts|text-to-speech|speech-to-text)(?:$|[-_.0-9])', name,
     ) or (name.startswith('gemini-') and re.search(r'-image(?:-|$)', name)):
         return False
-    if image_input_support(model_id) is True or re.match(
+    if mimo_chat_model_id(name) or image_input_support(model_id) is True or re.match(
         r'^(?:gpt-(?:3\.5|4|5)(?:[.o-]|$)|claude-(?:3|sonnet|opus|haiku)|'
         r'deepseek-(?:chat|reasoner|coder)(?:-|$)|'
         r'qwen(?:2(?:\.5)?|3)(?:[.-]|$))', name,
