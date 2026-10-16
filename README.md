@@ -1,4 +1,4 @@
-# 网关模型助手
+# workbuddy/trae模型一键导入助手
 
 Windows 桌面工具，从 OpenAI 兼容或 Anthropic 网关获取模型列表，选择模型后批量导入 WorkBuddy、Trae 和 TraeWork CN。只需填写 Base URL 与 API Key；工具不会读取其他应用保存的连接或密钥。
 
