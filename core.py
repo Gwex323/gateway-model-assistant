@@ -126,7 +126,7 @@ class GatewayConnection:
         key = check_key(api_key)
         auth = (self.models_auth or self.auth) if models else self.auth
         protocol = (self.models_protocol or self.protocol) if models else self.protocol
-        headers = {'Accept': 'application/json', 'User-Agent': 'GatewayModelAssistant/1.0.4'}
+        headers = {'Accept': 'application/json', 'User-Agent': 'GatewayModelAssistant/1.0.3'}
         if auth == 'bearer':
             headers['Authorization'] = 'Bearer ' + key
         else:
