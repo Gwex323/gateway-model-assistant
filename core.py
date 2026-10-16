@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import base64
-from model_capabilities import image_input_support
+from model_capabilities import image_input_support, chat_metadata_support, chat_model_support
 import copy
 import ctypes
 import ipaddress
@@ -257,6 +257,7 @@ class GatewayModel:
     output_display: str = ''
     limit_note: str = ''
     supports_images: bool | None = None
+    supports_chat: bool | None = None  # Upstream declarations only; names are a later fallback.
 
     @property
     def token_limits(self):
@@ -340,7 +341,8 @@ def _gateway_model(model):
             max_input = context
         elif context > max_output:
             max_input = context - max_output
-    return GatewayModel(model_id, max_input, max_output, supports_images=image_input_support(model_id, model))
+    return GatewayModel(model_id, max_input, max_output, supports_images=image_input_support(model_id, model),
+                        supports_chat=chat_metadata_support(model))
 
 
 def _anthropic_model(model):
@@ -353,6 +355,7 @@ def _anthropic_model(model):
         _token_limit(model.get('max_input_tokens')),
         _token_limit(model.get('max_tokens')),
         supports_images=image_input_support(model_id, model),
+        supports_chat=chat_metadata_support(model),
     )
 
 
@@ -371,6 +374,8 @@ def _merge_catalog_model(catalog, model):
         min(output_values) if output_values else None,
         supports_images=(False if False in (previous.supports_images, model.supports_images) else
                          True if True in (previous.supports_images, model.supports_images) else None),
+        supports_chat=(False if False in (previous.supports_chat, model.supports_chat) else
+                       True if True in (previous.supports_chat, model.supports_chat) else None),
     )
 
 
@@ -503,20 +508,18 @@ API_ONLY_IMPORT_HINT = '仅支持API导入'
 UNSUPPORTED_IMPORT_HINT = '不支持导入到目标应用'
 
 
-def unsupported_chat_model(model_id):
-    """Recognize dedicated non-chat families, not generic image/video inputs."""
-    name = model_id.casefold().split('/')[-1]
-    return re.search(
-        r'(?:^|[-_.])(?:seedream|seedance|minimax-h3|dall-e|stable-diffusion|flux|'
-        r'sora|imagen|gpt-image|image-generation|text-to-image|text-to-video|'
-        r'image-to-video|video-generation|embedding|embeddings|embed|rerank|reranker|'
-        r'whisper|tts|text-to-speech|speech-to-text)(?:$|[-_.0-9])', name,
-    ) is not None or (
-        name.startswith('gemini-') and re.search(r'-image(?:-|$)', name) is not None)
+def unsupported_chat_model(model_id, declared=None):
+    return chat_model_support(model_id, declared) is False
 
 
-def validate_chat_models(ids):
-    if any(unsupported_chat_model(mid) for mid in ids):
+def validate_chat_models(ids, chat_support_by_model=None):
+    values = {} if chat_support_by_model is None else chat_support_by_model
+    if not isinstance(values, dict) or len(values) > MAX_MODELS or any(
+        not valid_id(mid) or (value is not None and type(value) is not bool)
+        for mid, value in values.items()
+    ):
+        raise UserError('逐模型类型设置不合法。')
+    if any(unsupported_chat_model(mid, values.get(mid)) for mid in ids):
         raise UserError(UNSUPPORTED_IMPORT_HINT + '，请选择对话或视觉理解模型。')
 
 
@@ -619,7 +622,8 @@ def model_capabilities(model_id, overrides, per_model):
 
 
 def make_plan(raw, base_url, api_key, ids, capabilities=None, update_existing=False,
-              allow_private_http=False, token_limits=None, token_limits_by_model=None, capabilities_by_model=None):
+              allow_private_http=False, token_limits=None, token_limits_by_model=None, capabilities_by_model=None,
+              chat_support_by_model=None):
     url, key = normalize_url(base_url, allow_private_http=allow_private_http), check_key(api_key)
     endpoint = url.rstrip('/') + '/chat/completions'
     per_model = validate_model_capabilities(capabilities_by_model)
@@ -633,7 +637,7 @@ def make_plan(raw, base_url, api_key, ids, capabilities=None, update_existing=Fa
         raise UserError('模型能力设置不合法。')
     if not ids or len(ids) > 10000 or any(not valid_id(x) for x in ids):
         raise UserError('请至少选择一个有效模型；每批最多 10000 个。')
-    validate_chat_models(ids)
+    validate_chat_models(ids, chat_support_by_model)
     rows = []
     for mid in dict.fromkeys(ids):
         limits = model_limits.get(mid, default_limits)

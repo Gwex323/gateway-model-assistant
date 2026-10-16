@@ -33,6 +33,7 @@ class App:
         self.model_limit_sources = {}
         self.model_specs = {}
         self.model_image_support = {}
+        self.model_chat_support = {}
         self.model_display_names = {}
         self._model_column_widths = {}
         self.selected = set()
@@ -322,6 +323,7 @@ class App:
     def auth_changed(self, _event=None):
         self.loaded_connection = None
         self.model_image_support = {}
+        self.model_chat_support = {}
         self.ids = []
         self.model_token_limits = {}
         self.selected.clear()
@@ -359,6 +361,7 @@ class App:
         self.auth_combo.configure(state='readonly' if protocol == 'anthropic' else 'disabled')
         self.loaded_connection = None
         self.model_image_support = {}
+        self.model_chat_support = {}
         self.ids = []
         self.model_token_limits = {}
         self.selected.clear()
@@ -393,13 +396,14 @@ class App:
         listing.columnconfigure(0, weight=1)
         listing.rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(
-            listing, columns=('check', 'id', 'max_input', 'max_output', 'hint', 'display_name'),
-            displaycolumns=('check', 'id', 'display_name', 'max_input', 'max_output'),
+            listing, columns=('check', 'id', 'max_input', 'max_output', 'hint', 'display_name', 'import_status'),
+            displaycolumns=('check', 'id', 'display_name', 'max_input', 'max_output', 'import_status'),
             show='headings', selectmode='browse',
         )
         for name, label in [
             ('check', ''), ('id', '模型 ID'), ('max_input', '最大输入'),
             ('max_output', '最大输出'), ('hint', '规格来源 / 类型'), ('display_name', '显示名称'),
+            ('import_status', '导入状态'),
         ]:
             self.tree.heading(name, text=label)
             self.tree.column(name, stretch=False, anchor='center')
@@ -643,6 +647,7 @@ class App:
                                         if same_connection and mid in self.ids}
             self.model_token_limits = {model.id: model.token_limits for model in catalog}
             self.model_image_support = {model.id: model.supports_images for model in catalog}
+            self.model_chat_support = {model.id: model.supports_chat for model in catalog}
             self.model_limit_sources = {model.id: model.limit_source or ('接口元数据' if model.token_limits else '未识别') for model in catalog}
             self.model_specs = {model.id: {
                 'max_input': model.input_display or str(model.max_input_tokens or '未识别'),
@@ -653,9 +658,9 @@ class App:
             self.selected.clear()
             self.loaded_connection = (protocol, auth, url, key)
             self.refresh()
-            text_models = [model for model in catalog if not core.media_hint(model.id)]
+            text_models = [model for model in catalog if self.chat_support(model.id) is not False]
             recognized = sum(model.max_input_tokens is not None and model.max_output_tokens is not None for model in text_models)
-            self.status.set(f'已读取 {len(catalog)} 个；完整规格 {recognized}/{len(text_models)}，媒体 {len(catalog)-len(text_models)}')
+            self.status.set(f'已读取 {len(catalog)} 个；完整规格 {recognized}/{len(text_models)}，不可导入 {len(catalog)-len(text_models)}')
         fetcher = (core.fetch_anthropic_model_catalog
                    if protocol == 'anthropic' else core.fetch_model_catalog)
         options = {'auth': auth} if auth != 'auto' else {}
@@ -695,8 +700,16 @@ class App:
             self.tree.column(column, minwidth=self._model_column_minwidths[column],
                              width=natural + (spare if column == 'id' else 0), stretch=False)
 
+    def chat_support(self, model_id):
+        return core.chat_model_support(model_id, self.model_chat_support.get(model_id))
+
+    def import_status(self, model_id):
+        value = self.chat_support(model_id)
+        return (core.UNSUPPORTED_IMPORT_HINT if value is False else
+                '可导入' if value is True else '类型待确认')
+
     def token_display_values(self, model_id):
-        if core.unsupported_chat_model(model_id):
+        if self.chat_support(model_id) is False:
             return (core.UNSUPPORTED_IMPORT_HINT, core.UNSUPPORTED_IMPORT_HINT)
         spec = self.model_specs.get(model_id, {})
         limits = self.model_token_limits.get(model_id, {})
@@ -704,7 +717,7 @@ class App:
                 spec.get('max_output', str(limits.get('maxOutputTokens', '未识别'))))
 
     def refresh(self):
-        self.selected.difference_update(mid for mid in tuple(self.selected) if core.unsupported_chat_model(mid))
+        self.selected.difference_update(mid for mid in tuple(self.selected) if self.chat_support(mid) is False)
         self.tree.delete(*self.tree.get_children())
         query = self.search.get().casefold()
         for index, model_id in enumerate(self.ids):
@@ -715,8 +728,8 @@ class App:
                 '✓' if model_id in self.selected else '', model_id,
                 *self.token_display_values(model_id),
                 self.model_limit_sources.get(model_id, '媒体/嵌入，需核实' if media else '未验证'),
-                self.model_display_names.get(model_id, '默认 / 保留原名')),
-                tags=('unsupported',) if core.unsupported_chat_model(model_id) else
+                self.model_display_names.get(model_id, '默认 / 保留原名'), self.import_status(model_id)),
+                tags=('unsupported',) if self.chat_support(model_id) is False else
                      ('checked',) if model_id in self.selected else ('alternate',) if index % 2 else ())
         visible = len(self.tree.get_children())
         self.selected_count.set(f'已选择 {len(self.selected)} · 共 {len(self.ids)} 个 · 可见 {visible}')
@@ -738,7 +751,11 @@ class App:
         spec = self.model_specs.get(model_id, {})
         limits = self.model_token_limits.get(model_id, {})
         input_text, output_text = self.token_display_values(model_id)
-        text = (f'{model_id}\n\n官方/接口最大输入：{input_text}\n'
+        source = ('上游元数据' if type(self.model_chat_support.get(model_id)) is bool else
+                  '已知名称' if self.chat_support(model_id) is not None else '信息不足')
+        text = (f'{model_id}\n\n导入状态：{self.import_status(model_id)}\n'
+                f'识别依据：{source}\n\n'
+                f'官方/接口最大输入：{input_text}\n'
                 f'官方/接口最大输出：{output_text}\n\n'
                 f'实际导入输入预算：{limits.get("maxInputTokens", "不写入，保留原值")}\n'
                 f'实际导入输出预算：{limits.get("maxOutputTokens", "不写入，保留原值")}\n\n'
@@ -780,7 +797,7 @@ class App:
         if self.busy or not row:
             return
         model_id = self.ids[int(row)]
-        if core.unsupported_chat_model(model_id):
+        if self.chat_support(model_id) is False:
             return
         if model_id in self.selected:
             self.selected.remove(model_id)
@@ -803,7 +820,7 @@ class App:
         rows = self.tree.get_children()
         for row in rows:
             model_id = self.ids[int(row)]
-            if yes and not core.unsupported_chat_model(model_id):
+            if yes and self.chat_support(model_id) is not False:
                 self.selected.add(model_id)
             else:
                 self.selected.discard(model_id)
@@ -816,7 +833,7 @@ class App:
             index = int(row)
             checked = self.ids[index] in self.selected
             self.tree.set(row, 'check', '✓' if checked else '')
-            self.tree.item(row, tags=('unsupported',) if core.unsupported_chat_model(self.ids[index]) else
+            self.tree.item(row, tags=('unsupported',) if self.chat_support(self.ids[index]) is False else
                            ('checked',) if checked else ('alternate',) if index % 2 else ())
         self.selected_count.set(
             f'已选择 {len(self.selected)} · 共 {len(self.ids)} 个 · 可见 {len(self.tree.get_children())}')
@@ -858,7 +875,8 @@ class App:
             return url
 
     def build_import_plans(self, url, key, selected, flags, token_limits_by_model=None):
-        core.validate_chat_models(selected)
+        chat_support = {mid: self.model_chat_support.get(mid) for mid in selected}
+        core.validate_chat_models(selected, chat_support)
         names = self.selected_import_targets()
         if not names:
             raise core.UserError('请至少选择一个导入应用。')
@@ -881,6 +899,7 @@ class App:
                 raise core.UserError('未发现 TraeWork CN，无法使用 Anthropic 原生导入。')
             plan = trae_solo_adapter.make_plan(
                 target, url, key, selected, capabilities=flags, capabilities_by_model=image_capabilities,
+                chat_support_by_model=chat_support,
                 update_existing=overwrite_existing,
                 allow_private_http=allow_private_http,
                 token_limits_by_model=token_limits_by_model,
@@ -894,6 +913,7 @@ class App:
                 core.read_snapshot(self.path), url, key, selected,
                 capabilities={'supportsToolCall': True, **flags},
                 capabilities_by_model=image_capabilities, update_existing=overwrite_existing,
+                chat_support_by_model=chat_support,
                 allow_private_http=allow_private_http,
                 token_limits_by_model=token_limits_by_model,
             )
@@ -903,6 +923,7 @@ class App:
                 if target.name == trae_solo_adapter.SOLO_NAME:
                     plan = trae_solo_adapter.make_plan(
                         target, url, key, selected, capabilities=flags, capabilities_by_model=image_capabilities,
+                        chat_support_by_model=chat_support,
                         update_existing=overwrite_existing,
                         allow_private_http=allow_private_http,
                         token_limits_by_model=token_limits_by_model,
@@ -913,6 +934,7 @@ class App:
                 else:
                     plan = trae_adapter.make_plan(
                         target, url, key, selected, capabilities=flags, capabilities_by_model=image_capabilities,
+                        chat_support_by_model=chat_support,
                         update_existing=overwrite_existing,
                         allow_private_http=allow_private_http,
                         token_limits_by_model=token_limits_by_model,

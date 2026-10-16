@@ -1,5 +1,102 @@
-"""Conservative image-input recognition; never calls a generation endpoint."""
+"""Conservative chat/image-input recognition; no inference endpoint calls."""
 import re
+
+
+def chat_metadata_support(metadata):
+    """Read bounded, allow-listed declarations; conflicting negatives win."""
+    declarations = []
+    inputs, outputs = set(), set()
+    output_declarations = []
+    seen = set()
+    chat_types = {'chat', 'chat-model', 'chat-completion', 'chat-completions',
+                  'conversational', 'text-generation', 'image-text-to-text', 'video-text-to-text'}
+    other_types = {'embedding', 'embeddings', 'text-embedding', 'feature-extraction',
+                   'rerank', 'reranker', 'reranking', 'image-generation', 'text-to-image',
+                   'image-to-image', 'video-generation', 'text-to-video', 'image-to-video',
+                   'tts', 'text-to-speech', 'speech-to-text', 'transcription',
+                   'automatic-speech-recognition', 'audio-generation'}
+
+    def strings(value):
+        return {v.strip().lower() for v in value} if (
+            isinstance(value, list) and value and all(isinstance(v, str) for v in value)
+        ) else set()
+
+    def visit(obj, depth=0):
+        if not isinstance(obj, dict) or depth > 4 or id(obj) in seen:
+            return
+        seen.add(id(obj))
+        for key in ('supports_chat', 'supportsChat', 'chat'):
+            value = obj.get(key)
+            if isinstance(value, dict):
+                value = value.get('supported')
+            if type(value) is bool:
+                declarations.append(value)
+        for key in ('model_type', 'modelType', 'task', 'pipeline_tag', 'type', 'mode'):
+            value = obj.get(key)
+            if isinstance(value, str):
+                value = value.strip().lower().replace('_', '-')
+                if value in chat_types or value in other_types:
+                    declarations.append(value in chat_types)
+        for key in ('supported_endpoints', 'supportedEndpoints', 'endpoints'):
+            endpoints = strings(obj.get(key))
+            paths = {v.strip('/').removeprefix('v1/').removeprefix('v1beta/') for v in endpoints}
+            if paths & {'chat/completions', 'messages'}:
+                declarations.append(True)
+            elif paths and paths <= {'embeddings', 'rerank', 'images/generations', 'images/edits',
+                                     'videos', 'audio/speech', 'audio/transcriptions', 'audio/translations'}:
+                declarations.append(False)
+        for key in ('input_modalities', 'inputModalities'):
+            inputs.update(strings(obj.get(key)))
+        for key in ('output_modalities', 'outputModalities'):
+            value = strings(obj.get(key))
+            outputs.update(value)
+            output_declarations.append(value)
+        modalities = obj.get('modalities')
+        if isinstance(modalities, dict):
+            inputs.update(strings(modalities.get('input')))
+            value = strings(modalities.get('output'))
+            outputs.update(value)
+            output_declarations.append(value)
+        modality = obj.get('modality')
+        if isinstance(modality, str) and modality.count('->') == 1:
+            left, right = modality.split('->')
+            inputs.update(v.strip().lower() for v in left.split('+') if v.strip())
+            value = {v.strip().lower() for v in right.split('+') if v.strip()}
+            outputs.update(value)
+            output_declarations.append(value)
+        for key in ('capabilities', 'architecture', 'metadata', 'model_info', 'modelInfo'):
+            visit(obj.get(key), depth + 1)
+
+    visit(metadata)
+    # Text output alone can also describe transcription or reranking. Only
+    # infer chat from modalities when text is explicitly an accepted input too.
+    nontext = {'image', 'images', 'video', 'audio', 'embedding', 'embeddings', 'vector', 'vectors'}
+    if any(value and value <= nontext for value in output_declarations):
+        declarations.append(False)
+    elif 'text' in inputs and 'text' in outputs:
+        declarations.append(True)
+    return all(declarations) if declarations else None
+
+
+def chat_model_support(model_id, declared=None):
+    """Metadata first, known names second, otherwise explicitly unknown."""
+    if type(declared) is bool:
+        return declared
+    name = model_id.casefold().split('/')[-1]
+    if re.search(
+        r'(?:^|[-_.])(?:seedream|seedance|minimax-h3|dall-e|stable-diffusion|flux|'
+        r'sora|imagen|gpt-image|image-generation|text-to-image|text-to-video|'
+        r'image-to-video|video-generation|embedding|embeddings|embed|rerank|reranker|'
+        r'whisper|tts|text-to-speech|speech-to-text)(?:$|[-_.0-9])', name,
+    ) or (name.startswith('gemini-') and re.search(r'-image(?:-|$)', name)):
+        return False
+    if image_input_support(model_id) is True or re.match(
+        r'^(?:gpt-(?:3\.5|4|5)(?:[.o-]|$)|claude-(?:3|sonnet|opus|haiku)|'
+        r'deepseek-(?:chat|reasoner|coder)(?:-|$)|'
+        r'qwen(?:2(?:\.5)?|3)(?:[.-]|$))', name,
+    ):
+        return True
+    return None
 
 # Model-family reference URLs:
 # https://developers.openai.com/api/docs/models/gpt-4.1

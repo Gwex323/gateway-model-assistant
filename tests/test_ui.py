@@ -132,7 +132,7 @@ class UiTests(unittest.TestCase):
 
     def test_source_column_hidden_and_excluded_from_autosizing(self):
         self.assertEqual(tuple(self.ui.tree['displaycolumns']),
-                         ('check', 'id', 'display_name', 'max_input', 'max_output'))
+                         ('check', 'id', 'display_name', 'max_input', 'max_output', 'import_status'))
         before = dict(self.ui._model_column_widths)
         self.ui.model_limit_sources['code-model'] = '很长的来源信息' * 200
         self.ui.refresh()

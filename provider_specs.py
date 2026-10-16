@@ -204,7 +204,7 @@ def enrich_sgt_catalog(catalog):
     parsers = {'openai': parse_openai, 'gemini': parse_gemini, 'claude': parse_claude, 'cn': sgt_cn_specs.parse}
     for model in catalog:
         from core import media_hint, image_video_hint, API_ONLY_IMPORT_HINT
-        if media_hint(model.id):
+        if media_hint(model.id) and model.supports_chat is not True:
             hint = API_ONLY_IMPORT_HINT if image_video_hint(model.id) else '不适用'
             result.append(replace(model, input_display=hint, output_display=hint,
                                   limit_source='媒体/嵌入模型，非文本 Token 输出',
