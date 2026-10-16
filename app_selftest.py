@@ -51,6 +51,17 @@ def run_selftest(report_path):
             assert app.selected == {'selftest-model'}
             assert 'unsupported' in app.tree.item('1', 'tags')
             result['non_chat_models_disabled'] = True
+            assert app.tree.set('0', 'import_status') == '类型待确认'
+            declared = core._gateway_model({'id': 'Seedance-2.0', 'model_type': 'chat'})
+            app.model_chat_support[declared.id] = declared.supports_chat
+            app.refresh()
+            assert app.tree.set('1', 'import_status') == '可导入'
+            app.toggle_row('1')
+            assert 'Seedance-2.0' in app.selected
+            app.model_chat_support['Seedance-2.0'] = False
+            app.refresh()
+            assert 'Seedance-2.0' not in app.selected
+            result['metadata_first_model_classification'] = True
             assert 'hint' not in app.tree['displaycolumns']
             assert asset_path('app.png').is_file()
             assert root._desktop_icon.width() == 256 and root._desktop_icon.transparency_get(0, 0)

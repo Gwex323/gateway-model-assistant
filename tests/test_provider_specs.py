@@ -146,6 +146,14 @@ class SGTSpecTests(unittest.TestCase):
         self.assertEqual(result.id, 'unknown-model')
         self.assertIn('未识别', result.limit_source)
 
+    def test_chat_metadata_survives_spec_enrichment_and_media_alias(self):
+        for declared in (True, False):
+            model = self.enrich([core.GatewayModel('gpt-test', supports_chat=declared)])[0]
+            self.assertIs(model.supports_chat, declared)
+        model = self.enrich([core.GatewayModel('Seedance-2', supports_chat=True)])[0]
+        self.assertIs(model.supports_chat, True)
+        self.assertNotEqual(model.input_display, core.API_ONLY_IMPORT_HINT)
+
     def test_network_no_credentials_and_redirect_guard(self):
         with patch.object(specs.urllib.request, 'build_opener') as build:
             build.return_value.open.return_value = io.BytesIO(b'<html></html>')
