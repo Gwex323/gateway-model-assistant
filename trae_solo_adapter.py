@@ -99,6 +99,7 @@ def make_plan(target, base_url, api_key, ids, capabilities=None, update_existing
     key = core.check_key(api_key)
     if not ids or len(ids) > 10000 or any(not core.valid_id(mid) for mid in ids):
         raise core.UserError("请至少选择一个有效模型；每批最多 10000 个。")
+    core.validate_chat_models(ids)
     flags = capabilities or {}
     per_model = core.validate_model_capabilities(capabilities_by_model)
     display_names = trae_adapter.validate_display_names(display_names_by_model, ids)

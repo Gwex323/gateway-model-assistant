@@ -45,7 +45,12 @@ def run_selftest(report_path):
             app.refresh()
             app.toggle_row('0')
             assert app.selected == {'selftest-model'}
-            assert app.tree.item('1', 'values')[2:4] == ('仅支持API导入', '仅支持API导入')
+            assert app.tree.item('1', 'values')[2:4] == ('不支持导入到目标应用', '不支持导入到目标应用')
+            app.toggle_row('1')
+            app.select_visible(True)
+            assert app.selected == {'selftest-model'}
+            assert 'unsupported' in app.tree.item('1', 'tags')
+            result['non_chat_models_disabled'] = True
             assert 'hint' not in app.tree['displaycolumns']
             assert asset_path('app.png').is_file()
             assert root._desktop_icon.width() == 256 and root._desktop_icon.transparency_get(0, 0)
