@@ -62,6 +62,16 @@ def run_selftest(report_path):
             app.refresh()
             assert 'Seedance-2.0' not in app.selected
             result['metadata_first_model_classification'] = True
+            for mid in ('kling-v2.1', 'hy-3d', 'tencent/hunyuan3d-2.1'):
+                assert core.chat_model_support(mid) is False
+            assert core._gateway_model({'id': 'opaque-3d', 'output_modalities': ['mesh']}).supports_chat is False
+            app.ids.extend(['kling-v2.1', 'hy-3d'])
+            app.refresh()
+            app.select_visible(True)
+            assert not {'kling-v2.1', 'hy-3d'} & app.selected
+            assert app.tree.set('2', 'import_status') == core.UNSUPPORTED_IMPORT_HINT
+            assert app.tree.set('3', 'import_status') == core.UNSUPPORTED_IMPORT_HINT
+            result['video_3d_models_disabled'] = True
             assert 'hint' not in app.tree['displaycolumns']
             assert asset_path('app.png').is_file()
             assert root._desktop_icon.width() == 256 and root._desktop_icon.transparency_get(0, 0)

@@ -59,6 +59,27 @@ class ClassificationTests(unittest.TestCase):
         self.assertIs(chat_model_support('qwen-vl'), True)
         self.assertIs(chat_model_support('Seedance-2'), False)
 
+    def test_3d_tasks_and_output_modalities_reject_opaque_aliases(self):
+        for metadata in (
+            {'task': 'text-to-3d'}, {'model_type': 'image_to_3d'},
+            {'mode': '3d_generation'}, {'task': 'mesh-generation'},
+            {'metadata': {'pipeline_tag': '3d-model-generation'}},
+            {'output_modalities': ['3d']}, {'architecture': {'modality': 'image->mesh'}},
+            {'modalities': {'output': ['point_cloud']}},
+            {'supports_chat': True, 'output_modalities': ['3d-model']},
+        ):
+            with self.subTest(metadata=metadata):
+                model = core._gateway_model({'id': 'opaque-name', **metadata})
+                self.assertIs(model.supports_chat, False)
+                with self.assertRaisesRegex(core.UserError, core.UNSUPPORTED_IMPORT_HINT):
+                    core.validate_chat_models([model.id], {model.id: model.supports_chat})
+
+    def test_known_media_families_still_respect_explicit_metadata(self):
+        for model_id in ('kling', 'hy-3d', 'vendor/hunyuan3d-2.1'):
+            self.assertIs(chat_model_support(model_id), False)
+            self.assertIs(chat_model_support(model_id, True), True)
+            self.assertIs(chat_model_support(model_id, False), False)
+
     def test_conflicts_are_conservative_and_cycles_are_bounded(self):
         for metadata in (
             {'supports_chat': True, 'task': 'embedding'},
@@ -130,6 +151,8 @@ class ClassificationTests(unittest.TestCase):
                     {'id': 'opaque-generator', 'architecture': {'output_modalities': ['image']}},
                     {'id': 'gpt-image-1', 'task': 'conversational', 'input_modalities': ['text', 'image']},
                     {'id': 'unknown-alias'},
+                    {'id': 'kling-v2.1'}, {'id': 'hy-3d'},
+                    {'id': 'opaque-3d', 'output_modalities': ['mesh']},
                 ]})
                 with patch.object(app, 'run') as run, patch('modern_ui.core.fetch_model_catalog', return_value=catalog):
                     app.fetch()
@@ -138,6 +161,10 @@ class ClassificationTests(unittest.TestCase):
                 self.assertEqual(app.tree.set(rows['opaque-generator'], 'import_status'), core.UNSUPPORTED_IMPORT_HINT)
                 self.assertEqual(app.tree.set(rows['gpt-image-1'], 'import_status'), '可导入')
                 self.assertEqual(app.tree.set(rows['unknown-alias'], 'import_status'), '类型待确认')
+                for mid in ('kling-v2.1', 'hy-3d', 'opaque-3d'):
+                    self.assertEqual(app.tree.set(rows[mid], 'import_status'), core.UNSUPPORTED_IMPORT_HINT)
+                    app.toggle_row(rows[mid])
+                    self.assertNotIn(mid, app.selected)
                 app.toggle_row(rows['opaque-generator'])
                 self.assertFalse(app.selected)
                 app.select_visible(True)
@@ -151,6 +178,9 @@ class ClassificationTests(unittest.TestCase):
                 app.existing_policy.set('覆盖已有')
                 with self.assertRaisesRegex(core.UserError, core.UNSUPPORTED_IMPORT_HINT):
                     app.build_import_plans('https://gateway.example/v1', 'fake-key', ['opaque-generator'], {})
+                for mid in ('kling-v2.1', 'hy-3d', 'opaque-3d'):
+                    with self.assertRaisesRegex(core.UserError, core.UNSUPPORTED_IMPORT_HINT):
+                        app.build_import_plans('https://gateway.example/v1', 'fake-key', [mid], {})
                 app.auth_changed()
                 self.assertEqual(app.model_chat_support, {})
                 app.model_chat_support = {'stale-id': True}
