@@ -1,17 +1,17 @@
 # 验证结果
 
-## v0.12.9（2026-10-16）
+## v1.0.1（2026-10-16）
 
 - 合并后 276 项离线回归测试通过；已识别的非聊天模型保留展示、置灰并提示“不支持导入到目标应用”，点击、空格及全选均不可勾选。
 - WorkBuddy、Trae、TraeWork CN 适配器都会拒绝非聊天模型；视觉理解模型和未知别名不会仅因含 image、video、vision 被禁用。
-- 交付 EXE 在空工作目录和清理 Python/Tcl/Tk 环境后自检通过：version=0.12.9、frozen=true、ok=true、non_chat_models_disabled=true。
+- 交付 EXE 在空工作目录和清理 Python/Tcl/Tk 环境后自检通过：version=1.0.1、frozen=true、ok=true、non_chat_models_disabled=true。
 - 分类基于明确的已知模型名称；未使用真实凭据、付费推理或真实客户端导入验证。README 保持当前使用说明，不添加版本流水账。
 
-## v0.12.8（2026-10-08）
+## v1.0.0（2026-10-08）
 
 - 273 项离线回归测试通过，包括混合导入时仅 WorkBuddy 默认开启工具调用、显式关闭优先、保留已有不改动、同 URL 覆盖后开启。
 - 最小窗口下新选项完整显示。未读取真实密钥或执行真实客户端写入。
-- 交付 EXE 在空工作目录与清理 Python/Tcl/Tk 环境后自检通过，version=0.12.8、frozen=true、ok=true。
+- 交付 EXE 在空工作目录与清理 Python/Tcl/Tk 环境后自检通过，version=1.0.0、frozen=true、ok=true。
 
 ## v0.12.7（2026-09-17）
 

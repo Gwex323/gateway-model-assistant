@@ -55,7 +55,7 @@ def read_document(url):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), SameOriginRedirect())
     # Claude serves its public Markdown representation via content negotiation.
     accept = 'text/markdown' if urllib.parse.urlsplit(url).hostname in ('platform.claude.com', 'docs.bigmodel.cn', 'platform.kimi.com') else 'text/html,application/json'
-    headers = {'Accept': accept, 'User-Agent': 'GatewayModelAssistant/0.12.9'}
+    headers = {'Accept': accept, 'User-Agent': 'GatewayModelAssistant/1.0.1'}
     body = None
     if url == sgt_cn_specs.HY_URL:
         # This is the public model page's READ-ONLY configuration query.
