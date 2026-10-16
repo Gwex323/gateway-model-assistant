@@ -24,7 +24,7 @@ class PublicDocsRedirect(urllib.request.HTTPRedirectHandler):
 def _read_document(url):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), PublicDocsRedirect())
     request = urllib.request.Request(url, headers={'Accept': 'text/html',
-                                                  'User-Agent': 'GatewayModelAssistant/0.12.8'})
+                                                  'User-Agent': 'GatewayModelAssistant/0.12.9'})
     with opener.open(request, timeout=8) as response:
         data = response.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
