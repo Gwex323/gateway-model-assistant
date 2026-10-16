@@ -2,6 +2,17 @@
 import re
 
 
+def mimo_chat_model_id(model_id):
+    """Normalize only explicit MiMo namespaces, never arbitrary gateway aliases."""
+    for prefix in ('xiaomi/', 'mimo/'):
+        if model_id.startswith(prefix):
+            model_id = model_id[len(prefix):]
+            break
+    return model_id if re.fullmatch(
+        r'mimo-v\d+(?:\.\d+)?(?:-(?:pro|flash)(?:-ultraspeed)?)?', model_id,
+    ) else None
+
+
 def chat_metadata_support(metadata):
     """Read bounded, allow-listed declarations; conflicting negatives win."""
     declarations = []
@@ -88,7 +99,7 @@ def chat_model_support(model_id, declared=None):
         return declared
     # A provider namespace may carry the only family identifier (kling/video-o1).
     # Keep token boundaries so unrelated chat aliases such as klingon are unknown.
-    if re.search(r'(?:^|[/_.-])(?:kling(?:ai)?|(?:hy|hunyuan)[-_.]?3d)(?=$|[/_.-]|[0-9])',
+    if re.search(r'(?:^|[/_.-])(?:kling(?:ai)?|tripo(?:[-_.]?3d)?|(?:hy|hunyuan)[-_.]?3d)(?=$|[/_.-]|[0-9])',
                  model_id.casefold()):
         return False
     name = model_id.casefold().split('/')[-1]
@@ -97,10 +108,10 @@ def chat_model_support(model_id, declared=None):
         r'sora|imagen|gpt-image|image-generation|text-to-image|text-to-video|'
         r'image-to-video|video-generation|text-to-3d|image-to-3d|3d-generation|'
         r'3d-model-generation|mesh-generation|embedding|embeddings|embed|rerank|reranker|'
-        r'whisper|tts|text-to-speech|speech-to-text)(?:$|[-_.0-9])', name,
+        r'whisper|asr|tts|text-to-speech|speech-to-text)(?:$|[-_.0-9])', name,
     ) or (name.startswith('gemini-') and re.search(r'-image(?:-|$)', name)):
         return False
-    if image_input_support(model_id) is True or re.match(
+    if mimo_chat_model_id(name) or image_input_support(model_id) is True or re.match(
         r'^(?:gpt-(?:3\.5|4|5)(?:[.o-]|$)|claude-(?:3|sonnet|opus|haiku)|'
         r'deepseek-(?:chat|reasoner|coder)(?:-|$)|'
         r'qwen(?:2(?:\.5)?|3)(?:[.-]|$))', name,

@@ -72,6 +72,23 @@ def run_selftest(report_path):
             assert app.tree.set('2', 'import_status') == core.UNSUPPORTED_IMPORT_HINT
             assert app.tree.set('3', 'import_status') == core.UNSUPPORTED_IMPORT_HINT
             result['video_3d_models_disabled'] = True
+            from sgt_cn_specs import parse_mimo
+            mimo_spec = parse_mimo(
+                '<table><tr><td>`mimo-v2.6-pro`<br/>`mimo-v2.6-flash`</td>'
+                '<td>Context Window: 1M<br/>Maximum Output: 128K</td></tr></table>',
+                'mimo-v2.6-flash')
+            assert mimo_spec is not None and mimo_spec.output_limit == 128000
+            app.ids.extend(['tripo', 'mimo-v2.6-flash'])
+            app.model_token_limits['mimo-v2.6-flash'] = {
+                'maxInputTokens': mimo_spec.input_limit - mimo_spec.output_limit,
+                'maxOutputTokens': mimo_spec.output_limit,
+            }
+            app.refresh()
+            app.select_visible(True)
+            assert 'tripo' not in app.selected and 'mimo-v2.6-flash' in app.selected
+            assert app.tree.set('4', 'import_status') == core.UNSUPPORTED_IMPORT_HINT
+            assert app.token_display_values('mimo-v2.6-flash') == ('872000', '128000')
+            result['mimo_specs_tripo_verified'] = True
             assert 'hint' not in app.tree['displaycolumns']
             assert asset_path('app.png').is_file()
             assert root._desktop_icon.width() == 256 and root._desktop_icon.transparency_get(0, 0)

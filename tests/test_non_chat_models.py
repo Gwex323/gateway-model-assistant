@@ -15,10 +15,12 @@ BLOCKED = ('Seedream-4', 'Seedance-2', 'MiniMax-H3', 'gpt-image-1',
            'kling', 'Kling-v2.1-master', 'kwai-kling-video-o1', 'klingai-2.0',
            'kling/video-o1', 'vendor/kling/2.1', 'hy-3d', 'hy-3d-3.1',
            'hy_3d_v2', 'HY3D-2.1', 'tencent/hunyuan3d-2.1', 'hunyuan-3d-2',
-           'opaque-text-to-3d', 'opaque-image-to-3d')
+           'opaque-text-to-3d', 'opaque-image-to-3d',
+           'tripo', 'Tripo-v3', 'tripo3d-v2', 'tripo-3d', 'tripo-text-to-model', 'tripo/model')
 ALLOWED = ('qwen-vl', 'deepseek-vision-exp', 'gemini-2.5-pro',
            'video-understanding-model', 'image-reader', 'unknown-model',
-           'klingon-chat', 'hybrid-chat', 'hunyuan-vision', '3d-scene-understanding', 'mesh-reader')
+           'klingon-chat', 'hybrid-chat', 'hunyuan-vision', '3d-scene-understanding', 'mesh-reader',
+           'tripod-chat', 'tripoli-vision')
 
 
 class NonChatTests(unittest.TestCase):

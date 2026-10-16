@@ -6,6 +6,7 @@ import json
 import re
 from urllib.parse import parse_qs, urlsplit
 from official_limits import SpecHTML
+from model_capabilities import mimo_chat_model_id
 
 VOLC_URL = 'https://www.volcengine.com/api/doc/getDocDetail?LibraryID=82379&DocumentID=1330310'
 VOLC_PAGE = 'https://www.volcengine.com/docs/82379/1330310'
@@ -23,8 +24,9 @@ def route(model_id):
         name = model_id.lower()
         kind = 'vlm' if name.endswith('-flash') else 'text'
         return ('cn', name, 'https://docs.bigmodel.cn/cn/guide/models/' + kind + '/' + name)
-    if re.fullmatch(r'mimo-v\d+(?:\.\d+)?(?:-pro)?', model_id):
-        return ('cn', model_id, MIMO_URL)
+    mimo_id = mimo_chat_model_id(model_id)
+    if mimo_id:
+        return ('cn', mimo_id, MIMO_URL)
     if model_id in ('kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6'):
         return ('cn', model_id, KIMI_URL)
     if model_id.startswith('doubao-seed-') or re.fullmatch(r'deepseek-v4-(?:pro|flash)-ga-\d{6}', model_id):
@@ -109,17 +111,28 @@ def parse_glm(text, model_id):
 
 def parse_mimo(text, model_id):
     from provider_specs import ModelSpec, number
+    model_id = mimo_chat_model_id(model_id)
+    if model_id is None:
+        return None
     page, _ = flat_html(text)
     found = []
     for table in page.tables:
         for row in table:
-            if len(row) < 3 or clean(row[0]) != model_id:
+            if len(row) < 2:
                 continue
-            match = re.fullmatch(r'Context Window:\s*([\d.]+[KM]?)\s+Maximum Output:\s*([\d.]+[KM]?)', row[2], re.I)
-            if match:
-                context, output = (number(x) for x in match.groups())
-                if context and output and context > output:
-                    found.append(ModelSpec(context, output, True, True))
+            # First cell may list multiple exact IDs and a retirement note.
+            ids = re.findall(r'(?<![\w.-])mimo-v\d+(?:\.\d+)?(?:-[a-z0-9]+)*(?![\w.-])', clean(row[0]))
+            if model_id not in ids:
+                continue
+            # Capability rowspans shift the limit cell; never borrow values
+            # from another model's row or treat RPM/TPM as token limits.
+            for cell in row[1:]:
+                match = re.fullmatch(r'Context Window:\s*([\d.]+[KM]?)\s+Maximum Output:\s*([\d.]+[KM]?)', clean(cell), re.I)
+                if match:
+                    context, output = (number(x) for x in match.groups())
+                    if context and output and context > output:
+                        shorthand = any(value[-1:].upper() in ('K', 'M') for value in match.groups())
+                        found.append(ModelSpec(context, output, True, shorthand))
     return unique(found)
 
 
